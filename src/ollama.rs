@@ -30,7 +30,7 @@ pub(crate) async fn handle_prompt(prompt: String, ollama: &mut Ollama) {
             )
         )
         .await;
-    let message = res.unwrap().message.content;
+    let message = res.unwrap().message.content.replace("!", " !");
     let mut expr = arithmetic_to_lambda(&message);
     while beta_reduce_step(&mut expr) { println!("{expr}") }
     let res = unchurch(&expr);

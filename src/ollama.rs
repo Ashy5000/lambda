@@ -1,8 +1,10 @@
 use ollama_rs::Ollama;
 use ollama_rs::generation::chat::ChatMessage;
 use ollama_rs::generation::chat::request::ChatMessageRequest;
-
+use speedy2d::font::Font;
+use speedy2d::Window;
 use crate::decoding::{arithmetic_to_lambda, interpret_expr};
+use crate::graphics::LambdaGraphicsHandler;
 use crate::numerals::unchurch;
 use crate::reduction::{beta_reduce, beta_reduce_step};
 
@@ -19,7 +21,7 @@ pub(crate) fn instantiate_ollama() -> Ollama {
     Ollama::default()
 }
 
-pub(crate) async fn handle_prompt(prompt: String, ollama: &mut Ollama) {
+pub(crate) async fn handle_prompt(prompt: String, ollama: &mut Ollama, window: Window) {
     let mut history = vec![];
     let res = ollama
         .send_chat_messages_with_history(
@@ -32,7 +34,11 @@ pub(crate) async fn handle_prompt(prompt: String, ollama: &mut Ollama) {
         .await;
     let message = res.unwrap().message.content.replace("!", " !");
     let mut expr = arithmetic_to_lambda(&message);
-    while beta_reduce_step(&mut expr) { println!("{expr}") }
+    let mut terms = vec![];
+    while beta_reduce_step(&mut expr) { println!("{expr}"); terms.push(expr.clone()) }
     let res = unchurch(&expr);
     println!("It's {}!", res);
+    let font = Font::new(include_bytes!("../IosevkaTermSlabNerdFont-Medium.ttf")).unwrap();
+    let handler = LambdaGraphicsHandler::new(terms, font, format!(" = {res}"));
+    window.run_loop(handler);
 }

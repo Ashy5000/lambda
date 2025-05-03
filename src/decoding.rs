@@ -76,11 +76,11 @@ pub(crate) fn arithmetic_to_lambda(input: &String) -> LambdaExpr {
         let div = interpret_expr(&"(λn.((λf.(λx.xx)(λx.f(xx)))(λc.λn.λm.λf.λx.(λd.(λn.n(λx.(λa.λb.b))(λa.λb.a))d((λf.λx.x)fx)(f(cdmfx)))((λm.λn.n(λn.λf.λx.n(λg.λh.h(gf))(λu.x)(λu.u))m)nm)))((λn.λf.λx.f(nfx))n))".to_string()).unwrap();
         let iszero = interpret_expr(&"λn.n(λx.(λa.λb.b))(λa.λb.a)".to_string()).unwrap();
         let fac = interpret_expr(&format!("(λx.(λy.x(yy))(λy.x(yy)))(λf.λn.(({iszero})n)({})(({mul})n(f(({pred})n))))", church(1))).unwrap();
-        let first_word = words.pop().unwrap();
-        let (x, op_string) = if first_word != "!" {
-            (first_word.parse().unwrap(), words.pop().unwrap())
+        let last_word = words.pop().unwrap();
+        let op_string = if last_word != "!" {
+            words.pop().unwrap()
         } else {
-            (words.pop().unwrap().parse().unwrap(), first_word)
+            last_word.clone()
         };
         let op = op_string.as_str();
         let op_lambda = match op {
@@ -91,14 +91,16 @@ pub(crate) fn arithmetic_to_lambda(input: &String) -> LambdaExpr {
             "!" => fac,
             x => panic!("Unknown operation {x}")
         };
-        let x_lambda = church(x);
         LambdaExpr {
             expr_type: ExprType::App,
             id: 0,
-            children: vec![
-                if op_string == "!" {
-                    op_lambda
-                } else {
+            children: if last_word == "!" {
+                vec![
+                    op_lambda,
+                    arithmetic_to_lambda(&words.join(" "))
+                ]
+            } else {
+                vec![
                     LambdaExpr {
                         expr_type: ExprType::App,
                         id: 0,
@@ -107,10 +109,10 @@ pub(crate) fn arithmetic_to_lambda(input: &String) -> LambdaExpr {
                             op_lambda,
                             arithmetic_to_lambda(&words.join(" "))
                         ],
-                    }
-                },
-                x_lambda
-            ]
+                    },
+                    church(last_word.parse().unwrap())
+                ]
+            }
         }
     }
 }

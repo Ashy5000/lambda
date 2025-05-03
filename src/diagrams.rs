@@ -107,7 +107,7 @@ pub(crate) fn construct_diagram(expr: &LambdaExpr, p: &Passthrough) -> Diagram {
             let mut child = construct_diagram(&expr.children[0], &new_p);
             let var_bar = Line{
                 origin: (0.0, p.next_position),
-                length: child.rightmost().0 + PADDING,
+                length: child.rightmost().0 + if expr.children[0].expr_type == ExprType::Abs { 0.0 } else { PADDING },
                 direction: Direction::Horizontal
             };
             child.add_line(var_bar);

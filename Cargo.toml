@@ -8,3 +8,4 @@ rand = "0.9.1"
 ollama-rs = "0.3.0"
 tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
 speedy2d = "2.1.0"
+soloud = "1.1.0"

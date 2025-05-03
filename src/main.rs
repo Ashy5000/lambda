@@ -5,6 +5,7 @@ mod decoding;
 mod numerals;
 mod graphics;
 mod diagrams;
+mod sound;
 
 use std::io;
 use speedy2d::window::WindowCreationOptions;

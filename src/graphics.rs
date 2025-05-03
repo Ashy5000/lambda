@@ -1,12 +1,14 @@
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use rand::TryRngCore;
+use soloud::*;
 use speedy2d::Graphics2D;
 use speedy2d::color::Color;
 use speedy2d::font::{Font, TextAlignment, TextLayout, TextOptions};
-use speedy2d::window::{KeyScancode, VirtualKeyCode, WindowHandler, WindowHelper};
+use speedy2d::window::{KeyScancode, VirtualKeyCode, WindowHandler, WindowHelper, WindowStartupInfo};
 use crate::diagrams::{construct_diagram, Direction, Passthrough};
 use crate::expr::LambdaExpr;
+use crate::sound::sound_thread;
 
 const LINE_THICKNESS: f32 = 5.0;
 const TEXT_SIZE: f32 = 13.0;
@@ -25,6 +27,9 @@ pub(crate) struct LambdaGraphicsHandler {
     original_terms: Vec<LambdaExpr>,
     original_res: String,
     first_frame: bool,
+    played_sound: bool,
+    play_next_frame: bool,
+    trigger_flag: Arc<Mutex<bool>>
 }
 
 impl LambdaGraphicsHandler {
@@ -38,6 +43,9 @@ impl LambdaGraphicsHandler {
             original_terms: terms,
             original_res: res,
             first_frame: true,
+            played_sound: false,
+            play_next_frame: false,
+            trigger_flag: sound_thread()
         }
     }
 }
@@ -74,6 +82,13 @@ impl WindowHandler for LambdaGraphicsHandler {
                 Direction::Horizontal => ((line.origin.0 + line.length + (LINE_THICKNESS * scale) / 2.0) * scale + x_offset, line.origin.1 * scale + y_offset)
             };
             graphics.draw_line(startpoint, endpoint, LINE_THICKNESS * scale, if removed { Color::WHITE } else { Color::BLUE });
+        }
+        if !removed && !self.played_sound {
+            self.play_next_frame = true;
+            self.played_sound = true;
+        } else if self.play_next_frame {
+            *Arc::clone(&self.trigger_flag).lock().unwrap() = true;
+            self.play_next_frame = false;
         }
         let term_string: String = if removed {
             let string = term.to_string();
@@ -112,7 +127,9 @@ impl WindowHandler for LambdaGraphicsHandler {
             self.res = self.original_res.clone();
             self.res_cmp = String::new();
             self.delay = DELAY * DELAY_START_MULTIPLIER;
+            self.played_sound = false;
             self.first_frame = true;
+            *Arc::clone(&self.trigger_flag).lock().unwrap() = true;
             helper.request_redraw();
         }
     }

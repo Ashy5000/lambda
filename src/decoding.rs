@@ -1,4 +1,3 @@
-use std::fmt::format;
 use crate::expr::{ExprType, LambdaExpr};
 use crate::numerals::church;
 

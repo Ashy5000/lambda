@@ -1,13 +1,9 @@
 use ollama_rs::Ollama;
 use ollama_rs::generation::chat::ChatMessage;
 use ollama_rs::generation::chat::request::ChatMessageRequest;
-use speedy2d::font::Font;
-use speedy2d::Window;
-use crate::decoding::{arithmetic_to_lambda, interpret_expr};
+use crate::decoding::arithmetic_to_lambda;
 use crate::expr::LambdaExpr;
-use crate::graphics::LambdaGraphicsHandler;
-use crate::numerals::unchurch;
-use crate::reduction::{beta_reduce, beta_reduce_step};
+use crate::reduction::beta_reduce_step;
 
 const SYSTEM_PROMPT_0: &str = "You are an accurate AI model tasked with translating a user's query \
 into a mathematical expression. You will ONLY output the expression, with NO parenthesis. The \
@@ -22,7 +18,7 @@ pub(crate) fn instantiate_ollama() -> Ollama {
     Ollama::default()
 }
 
-pub(crate) async fn handle_prompt(prompt: String, ollama: &mut Ollama) -> (String, Vec<LambdaExpr>) {
+pub(crate) async fn handle_prompt(prompt: String, ollama: &mut Ollama) -> Vec<LambdaExpr> {
     let mut history = vec![];
     let res = ollama
         .send_chat_messages_with_history(
@@ -38,5 +34,5 @@ pub(crate) async fn handle_prompt(prompt: String, ollama: &mut Ollama) -> (Strin
     let mut expr = arithmetic_to_lambda(&message);
     let mut terms = vec![expr.clone()];
     while beta_reduce_step(&mut expr) { terms.push(expr.clone()) }
-    (output, terms)
+    terms
 }

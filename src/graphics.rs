@@ -141,15 +141,6 @@ impl WindowHandler for LambdaGraphicsHandler {
         helper.request_redraw();
     }
 
-    fn on_keyboard_char(&mut self, _: &mut WindowHelper<()>, unicode_codepoint: char) {
-        if unicode_codepoint.is_control() {
-            return;
-        }
-        if self.original_terms.len() == 0 {
-            self.prompt.push(unicode_codepoint);
-        }
-    }
-
     fn on_key_down(&mut self, helper: &mut WindowHelper<()>, virtual_key_code: Option<VirtualKeyCode>, _: KeyScancode) {
         let key_code = match virtual_key_code {
             Some(x) => x,
@@ -158,8 +149,7 @@ impl WindowHandler for LambdaGraphicsHandler {
         if self.original_terms.len() == 0 {
             if key_code == VirtualKeyCode::Return {
                 let mut ollama = instantiate_ollama();
-                let mut arith = String::new();
-                (arith, self.original_terms) = futures::executor::block_on(handle_prompt(self.prompt.clone(), &mut ollama));
+                self.original_terms = futures::executor::block_on(handle_prompt(self.prompt.clone(), &mut ollama));
                 self.terms = self.original_terms.clone();
                 self.res = format!(" = {}", unchurch(&self.terms[self.terms.len() - 1]));
                 self.prompt = String::new();
@@ -226,6 +216,15 @@ impl WindowHandler for LambdaGraphicsHandler {
             self.first_frame = true;
             self.frames_to_render = -1;
             helper.request_redraw();
+        }
+    }
+
+    fn on_keyboard_char(&mut self, _: &mut WindowHelper<()>, unicode_codepoint: char) {
+        if unicode_codepoint.is_control() {
+            return;
+        }
+        if self.original_terms.len() == 0 {
+            self.prompt.push(unicode_codepoint);
         }
     }
 }

@@ -38,7 +38,3 @@ pub(crate) fn beta_reduce_step(expr: &mut LambdaExpr) -> bool {
         found_redex
     }
 }
-
-pub(crate) fn beta_reduce(e: &mut LambdaExpr) {
-    while beta_reduce_step(e) {}
-}

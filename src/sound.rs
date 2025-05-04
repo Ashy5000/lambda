@@ -17,8 +17,15 @@ pub(crate) fn sound_thread() -> Arc<Mutex<bool>> {
         wav0.load_mem(include_bytes!("../reducing.mp3")).unwrap();
         let mut wav1 = Wav::default();
         wav1.load_mem(include_bytes!("../normal_form.mp3")).unwrap();
-        
+        wav1.set_volume(0.3);
+
         loop {
+            sl.stop_all();
+            while !*trigger.lock().unwrap() {
+                thread::sleep(std::time::Duration::from_millis(100));
+            }
+            *trigger.lock().unwrap() = false;
+            sl.stop_all();
             sl.play(&wav0);
             while !*trigger.lock().unwrap() {
                 thread::sleep(std::time::Duration::from_millis(100));
@@ -32,11 +39,6 @@ pub(crate) fn sound_thread() -> Arc<Mutex<bool>> {
             while sl.voice_count() > 0 {
                 thread::sleep(std::time::Duration::from_millis(100));
             }
-            sl.stop_all();
-            while !*trigger.lock().unwrap() {
-                thread::sleep(std::time::Duration::from_millis(100));
-            }
-            *trigger.lock().unwrap() = false;
         }
     });
 

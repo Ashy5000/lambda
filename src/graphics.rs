@@ -1,13 +1,14 @@
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::thread::sleep;
 use std::time::Duration;
-use soloud::*;
 use speedy2d::Graphics2D;
 use speedy2d::color::Color;
 use speedy2d::font::{Font, TextAlignment, TextLayout, TextOptions};
-use speedy2d::window::{KeyScancode, VirtualKeyCode, WindowHandler, WindowHelper, WindowStartupInfo};
+use speedy2d::window::{KeyScancode, VirtualKeyCode, WindowHandler, WindowHelper};
 use crate::diagrams::{construct_diagram, Direction, Passthrough};
 use crate::expr::LambdaExpr;
+use crate::numerals::unchurch;
+use crate::ollama::{handle_prompt, instantiate_ollama};
 use crate::sound::sound_thread;
 
 const LINE_THICKNESS: f32 = 5.0;
@@ -15,8 +16,8 @@ const TEXT_SIZE: f32 = 13.0;
 const TEXT_CUTOFF: usize = 3000;
 const TEXT_WIDTH: f32 = 300.0;
 const TEXT_PADDING: f32 = 100.0;
-const DELAY: u64 = 50;
-const DELAY_START_MULTIPLIER: u64 = 20;
+const DELAY: u64 = 10;
+const DELAY_START_MULTIPLIER: u64 = 1;
 
 pub(crate) struct LambdaGraphicsHandler {
     pub(crate) terms: Vec<LambdaExpr>,
@@ -29,29 +30,55 @@ pub(crate) struct LambdaGraphicsHandler {
     first_frame: bool,
     played_sound: bool,
     play_next_frame: bool,
-    trigger_flag: Arc<Mutex<bool>>
+    trigger_flag: Arc<Mutex<bool>>,
+    frames_to_render: i64,
+    frame: u64,
+    prompt: String
 }
 
 impl LambdaGraphicsHandler {
-    pub(crate) fn new(terms: Vec<LambdaExpr>, font: Font, res: String) -> Self {
+    pub(crate) fn new(font: Font) -> Self {
         Self {
-            terms: terms.clone(),
+            terms: vec![],
             font,
-            res: res.clone(),
+            res: String::new(),
             res_cmp: String::new(),
             delay: DELAY * DELAY_START_MULTIPLIER,
-            original_terms: terms,
-            original_res: res,
+            original_terms: vec![],
+            original_res: String::new(),
             first_frame: true,
             played_sound: false,
             play_next_frame: false,
-            trigger_flag: sound_thread()
+            trigger_flag: sound_thread(),
+            frames_to_render: -1,
+            frame: 1,
+            prompt: String::new()
         }
     }
 }
 
 impl WindowHandler for LambdaGraphicsHandler {
     fn on_draw(&mut self, helper: &mut WindowHelper<()>, graphics: &mut Graphics2D) {
+        let win_size = helper.get_size_pixels();
+        if self.terms.len() == 0 {
+            graphics.clear_screen(Color::BLACK);
+            let text_options: TextOptions = TextOptions::new().with_wrap_to_width(TEXT_WIDTH, TextAlignment::Center);
+            let text = self.font.layout_text(self.prompt.as_str(), TEXT_SIZE, text_options);
+            graphics.draw_text((win_size.x as f32 / 2.0 - (TEXT_WIDTH / 2.0), win_size.y as f32 / 2.0), Color::WHITE, &text);
+            helper.request_redraw();
+            return;
+        }
+        if self.frames_to_render == 0 {
+            helper.request_redraw();
+            return;
+        }
+        self.frames_to_render -= 1;
+        if self.frame % self.delay != 0 {
+            self.frame += 1;
+            helper.request_redraw();
+            return;
+        }
+        self.frame += 1;
         graphics.clear_screen(Color::BLACK);
         if self.first_frame {
             self.first_frame = false;
@@ -64,7 +91,6 @@ impl WindowHandler for LambdaGraphicsHandler {
             (self.terms[0].clone(), false)
         };
         let diagram = construct_diagram(&term, &Passthrough::top());
-        let win_size = helper.get_size_pixels();
         let right_edge = diagram.rightmost().0;
         let bottom_edge = diagram.bottommost().1;
         let x_scale = (win_size.x as f32 - (TEXT_WIDTH + 2.0 * TEXT_PADDING)) / right_edge;
@@ -112,24 +138,93 @@ impl WindowHandler for LambdaGraphicsHandler {
         let text_options: TextOptions = TextOptions::new().with_wrap_to_width(TEXT_WIDTH, TextAlignment::Left);
         let text = self.font.layout_text(term_str, TEXT_SIZE, text_options);
         graphics.draw_text((win_size.x as f32 - (TEXT_WIDTH + TEXT_PADDING), TEXT_PADDING), Color::WHITE, &text);
-        if self.terms.len() < 10 {
-            self.delay += DELAY;
-        } else if self.delay > DELAY {
-            self.delay -= DELAY;
-        }
-        thread::sleep(Duration::from_millis(self.delay));
         helper.request_redraw();
     }
 
+    fn on_keyboard_char(&mut self, _: &mut WindowHelper<()>, unicode_codepoint: char) {
+        if unicode_codepoint.is_control() {
+            return;
+        }
+        if self.original_terms.len() == 0 {
+            self.prompt.push(unicode_codepoint);
+        }
+    }
+
     fn on_key_down(&mut self, helper: &mut WindowHelper<()>, virtual_key_code: Option<VirtualKeyCode>, _: KeyScancode) {
-        if virtual_key_code.unwrap() == VirtualKeyCode::Space {
+        let key_code = match virtual_key_code {
+            Some(x) => x,
+            None => { return }
+        };
+        if self.original_terms.len() == 0 {
+            if key_code == VirtualKeyCode::Return {
+                let mut ollama = instantiate_ollama();
+                let mut arith = String::new();
+                (arith, self.original_terms) = futures::executor::block_on(handle_prompt(self.prompt.clone(), &mut ollama));
+                self.terms = self.original_terms.clone();
+                self.res = format!(" = {}", unchurch(&self.terms[self.terms.len() - 1]));
+                self.prompt = String::new();
+                *Arc::clone(&self.trigger_flag).lock().unwrap() = true;
+            } else if key_code == VirtualKeyCode::Backspace {
+                self.prompt.pop();
+            }
+            return;
+        }
+        if key_code == VirtualKeyCode::Return {
+            if self.terms.len() == 1 {
+                *Arc::clone(&self.trigger_flag).lock().unwrap() = true;
+            }
             self.terms = self.original_terms.clone();
             self.res = self.original_res.clone();
             self.res_cmp = String::new();
             self.delay = DELAY * DELAY_START_MULTIPLIER;
             self.played_sound = false;
             self.first_frame = true;
-            *Arc::clone(&self.trigger_flag).lock().unwrap() = true;
+            self.frames_to_render = -1;
+            self.frame = 0;
+            helper.request_redraw();
+        } else if key_code == VirtualKeyCode::Space {
+            if self.frames_to_render != 0 {
+                self.frames_to_render = 0;
+            } else {
+                self.frames_to_render = -1;
+            }
+            self.frame = 0;
+            helper.request_redraw();
+        } else if key_code == VirtualKeyCode::Left {
+            if self.original_terms.len() - 2 < self.terms.len() {
+                return;
+            }
+            self.terms.insert(0, self.original_terms[self.original_terms.len() - self.terms.len() - 1].clone());
+            self.terms.insert(0, self.original_terms[self.original_terms.len() - self.terms.len() - 1].clone());
+            if self.frames_to_render <= 0 {
+                self.frames_to_render = 1;
+            }
+            self.frame = 0;
+            helper.request_redraw();
+        } else if key_code == VirtualKeyCode::Right {
+            if self.terms.len() <= 1 {
+                return;
+            }
+            if self.frames_to_render <= 0 {
+                self.frames_to_render = 1;
+            }
+            self.frame = 0;
+            helper.request_redraw();
+        } else if key_code == VirtualKeyCode::Tab {
+            if self.terms.len() > 1 {
+                *Arc::clone(&self.trigger_flag).lock().unwrap() = true;
+                sleep(Duration::from_millis(20));
+                *Arc::clone(&self.trigger_flag).lock().unwrap() = true;
+            }
+            self.terms = vec![];
+            self.original_terms = vec![];
+            self.res = String::new();
+            self.res_cmp = String::new();
+            self.prompt = String::new();
+            self.frame = 0;
+            self.played_sound = false;
+            self.first_frame = true;
+            self.frames_to_render = -1;
             helper.request_redraw();
         }
     }
